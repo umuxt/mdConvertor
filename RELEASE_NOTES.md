@@ -1,3 +1,13 @@
+## What's New in v1.2.0
+
+This release fixes external web services integration, resolves bot-detection blocks, and includes robust YouTube transcription.
+
+### 🐛 Bug Fixes & Service Upgrades
+- **Robust YouTube Transcript Retrieval:** Replaced the legacy `youtube-transcript-api` (which returned empty XML parsing errors due to anti-bot rate-limiting) with a native `yt-dlp` timedtext extractor that fetches and parses `json3`/`vtt` subtitle streams natively using `requests`.
+- **Wikipedia & URL Fetching Fixes (User-Agent):** Requests for generic URLs (like Wikipedia) are now fetched using a standard browser `User-Agent` to bypass scraper blocking (`403 Forbidden`). Fetched assets are written to a temporary file before being converted.
+
+---
+
 ## What's New in v1.1.0
 
 This release brings size optimizations, cleaner resource management, and AI-powered Vision OCR capabilities.
@@ -11,8 +21,6 @@ This release brings size optimizations, cleaner resource management, and AI-powe
 - **Application Size Optimization (~42 MB saved):** Filtered out unused pocketsphinx dil dosyaları and non-macOS flac binary dependencies during packaging.
 - **Zero yt-dlp Cache Clutter:** Disabled caching in `yt-dlp` to prevent writing clutter folders to `~/.cache/yt-dlp`.
 - **Automatic Temp Cleanup:** Uploaded files are immediately deleted from temporary storage right after conversion, ensuring zero system pollution.
-
----
 
 ## What's New in v1.0.0
 
