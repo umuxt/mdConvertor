@@ -10,6 +10,21 @@ block_cipher = None
 markitdown_datas = collect_data_files('markitdown')
 markitdown_hidden = collect_submodules('markitdown')
 
+# Collect magika ML model files (required by MarkItDown for file-type detection)
+magika_datas = collect_data_files('magika')
+
+# Collect onnxruntime data files (required by magika)
+try:
+    onnx_datas = collect_data_files('onnxruntime')
+except Exception:
+    onnx_datas = []
+
+# Collect markitdown converter data
+try:
+    mammoth_datas = collect_data_files('mammoth')
+except Exception:
+    mammoth_datas = []
+
 # Include template folder
 templates_src = os.path.join(os.path.dirname(os.path.abspath(SPEC)), 'templates')
 
@@ -20,15 +35,31 @@ a = Analysis(
     datas=[
         (templates_src, 'templates'),
         *markitdown_datas,
+        *magika_datas,
+        *onnx_datas,
+        *mammoth_datas,
     ],
     hiddenimports=[
         'markitdown',
+        'markitdown._markitdown',
         'flask',
         'webview',
         'webview.platforms.cocoa',
         'jinja2',
         'werkzeug',
-        'markitdown._markitdown',
+        'magika',
+        'onnxruntime',
+        'onnxruntime.capi._pybind_state',
+        'mammoth',
+        'openpyxl',
+        'pptx',
+        'docx',
+        'pandas',
+        'PIL',
+        'speech_recognition',
+        'pydub',
+        'chardet',
+        'charset_normalizer',
         *markitdown_hidden,
     ],
     hookspath=[],

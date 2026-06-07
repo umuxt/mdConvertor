@@ -2,3 +2,5 @@ markitdown[all]
 flask
 pywebview
 pyinstaller
+yt-dlp
+youtube-transcript-api
