@@ -10,7 +10,7 @@ Built with [MarkItDown](https://github.com/microsoft/markitdown) (Microsoft) · 
 
 ### 1. Download the latest release
 
-👉 **[mdConvertor-1.0.0-macOS.dmg](https://github.com/umuxt/mdConvertor/releases/latest)** — GitHub Releases
+👉 **[Download the latest macOS DMG](https://github.com/umuxt/mdConvertor/releases/latest)** — GitHub Releases
 
 ### 2. Install
 
@@ -99,7 +99,7 @@ chmod +x build.sh
 ```bash
 chmod +x create_dmg.sh
 ./create_dmg.sh
-# → dist/mdConvertor-1.0.0-macOS.dmg
+# → dist/mdConvertor-1.3.0-macOS.dmg
 ```
 
 ---

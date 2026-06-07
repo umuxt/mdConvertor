@@ -529,16 +529,19 @@ const baseUrlField   = document.getElementById('field-base-url');
 const baseUrlInput   = document.getElementById('llm-base-url');
 const modelContainer = document.getElementById('model-container');
 
-// Load configurations
-providerSelect.value = localStorage.getItem('md_llm_provider') || 'openai';
-apiKeyInput.value    = localStorage.getItem('md_llm_api_key') || '';
-baseUrlInput.value   = localStorage.getItem('md_llm_base_url') || '';
-const savedModel     = localStorage.getItem('md_llm_model') || 'gpt-4o-mini';
+// Global settings state
+let savedSettings = {
+  provider: 'openai',
+  key: '',
+  base_url: '',
+  model: 'gpt-4o-mini'
+};
 
 // Update fields based on provider selection
 function updateFields() {
   const provider = providerSelect.value;
-  localStorage.setItem('md_llm_provider', provider);
+  savedSettings.provider = provider;
+  saveSettingsToServer();
 
   // Label and Base URL visibility
   if (provider === 'openai') {
@@ -561,8 +564,9 @@ function updateFields() {
     // Model dropdown
     modelContainer.innerHTML = `
       <select id="llm-model">
-        <option value="claude-3-5-sonnet-latest">claude-3-5-sonnet-latest</option>
-        <option value="claude-3-5-haiku-latest">claude-3-5-haiku-latest</option>
+        <option value="claude-sonnet-4-6">claude-sonnet-4-6 (Recommended)</option>
+        <option value="claude-haiku-4-5-20251001">claude-haiku-4-5</option>
+        <option value="claude-opus-4-8">claude-opus-4-8</option>
       </select>
     `;
   } else if (provider === 'custom') {
@@ -581,43 +585,82 @@ function updateFields() {
   if (newModelEl) {
     if (newModelEl.tagName === 'SELECT') {
       const options = Array.from(newModelEl.options).map(o => o.value);
-      if (options.includes(savedModel)) {
-        newModelEl.value = savedModel;
+      if (options.includes(savedSettings.model)) {
+        newModelEl.value = savedSettings.model;
       } else {
         newModelEl.selectedIndex = 0;
       }
     } else {
-      newModelEl.value = savedModel;
+      newModelEl.value = savedSettings.model;
     }
     
-    newModelEl.addEventListener('change', saveModel);
-    newModelEl.addEventListener('input', saveModel);
+    const saveModelLocal = () => {
+      savedSettings.model = newModelEl.value;
+      saveSettingsToServer();
+    };
+    newModelEl.addEventListener('change', saveModelLocal);
+    newModelEl.addEventListener('input', saveModelLocal);
   }
 }
 
-function saveModel() {
+// Save all settings to backend config.json
+async function saveSettingsToServer() {
   const modelEl = document.getElementById('llm-model');
-  if (modelEl) {
-    localStorage.setItem('md_llm_model', modelEl.value);
+  const payload = {
+    provider: providerSelect.value,
+    key: apiKeyInput.value.trim(),
+    base_url: baseUrlInput.value.trim(),
+    model: modelEl ? modelEl.value : savedSettings.model
+  };
+  
+  // Also update global state
+  savedSettings = payload;
+
+  try {
+    await fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  } catch (err) {
+    console.error("Failed to save settings to server:", err);
+  }
+}
+
+// Load settings from backend config.json on startup
+async function loadSettingsFromServer() {
+  try {
+    const resp = await fetch('/api/settings');
+    if (resp.ok) {
+      const data = await resp.json();
+      savedSettings = {
+        provider: data.provider || 'openai',
+        key: data.key || '',
+        base_url: data.base_url || '',
+        model: data.model || 'gpt-4o-mini'
+      };
+      
+      providerSelect.value = savedSettings.provider;
+      apiKeyInput.value = savedSettings.key;
+      baseUrlInput.value = savedSettings.base_url;
+    }
+  } catch (err) {
+    console.error("Failed to load settings:", err);
+  } finally {
+    updateFields();
   }
 }
 
 // Bind event listeners
 providerSelect.addEventListener('change', updateFields);
 
-function saveApiKey() {
-  localStorage.setItem('md_llm_api_key', apiKeyInput.value.trim());
-}
-apiKeyInput.addEventListener('input', saveApiKey);
-apiKeyInput.addEventListener('change', saveApiKey);
-apiKeyInput.addEventListener('blur', saveApiKey);
+apiKeyInput.addEventListener('input', saveSettingsToServer);
+apiKeyInput.addEventListener('change', saveSettingsToServer);
+apiKeyInput.addEventListener('blur', saveSettingsToServer);
 
-function saveBaseUrl() {
-  localStorage.setItem('md_llm_base_url', baseUrlInput.value.trim());
-}
-baseUrlInput.addEventListener('input', saveBaseUrl);
-baseUrlInput.addEventListener('change', saveBaseUrl);
-baseUrlInput.addEventListener('blur', saveBaseUrl);
+baseUrlInput.addEventListener('input', saveSettingsToServer);
+baseUrlInput.addEventListener('change', saveSettingsToServer);
+baseUrlInput.addEventListener('blur', saveSettingsToServer);
 
 // Toggle collapse
 settingsToggle.addEventListener('click', () => {
@@ -625,7 +668,7 @@ settingsToggle.addEventListener('click', () => {
 });
 
 // Initialize on load
-updateFields();
+loadSettingsFromServer();
 
 /* ── Sections ──────────────────────────────────────────────────────────── */
 function showSection(id) {

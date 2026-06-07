@@ -16,6 +16,28 @@ from flask import Flask, request, jsonify, render_template
 
 from markitdown import MarkItDown
 
+# ── Configuration File helper ──────────────────────────────────────────────
+CONFIG_PATH = os.path.expanduser("~/Library/Application Support/mdConvertor/config.json")
+
+def read_config():
+    import json
+    if os.path.exists(CONFIG_PATH):
+        try:
+            with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+def write_config(data):
+    import json
+    os.makedirs(os.path.dirname(CONFIG_PATH), exist_ok=True)
+    try:
+        with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+    except Exception:
+        pass
+
 # ── Template directory (patched by main.py before import) ────────────────────
 TEMPLATE_DIR = os.environ.get(
     "MDCONVERTOR_TEMPLATE_DIR",
@@ -76,7 +98,7 @@ class ClaudeAdapter:
 
                 claude_model = model
                 if "gpt" in model or not model:
-                    claude_model = "claude-3-5-sonnet-20241022"
+                    claude_model = "claude-sonnet-4-6"
 
                 payload = {
                     "model": claude_model,
@@ -320,7 +342,7 @@ def convert_file():
                     conv_kwargs["llm_model"] = model or "gpt-4o-mini"
                 elif provider == "anthropic":
                     conv_kwargs["llm_client"] = ClaudeAdapter(api_key=key)
-                    conv_kwargs["llm_model"] = model or "claude-3-5-sonnet-latest"
+                    conv_kwargs["llm_model"] = model or "claude-sonnet-4-6"
                 elif provider == "custom":
                     from openai import OpenAI
                     conv_kwargs["llm_client"] = OpenAI(api_key=key, base_url=base_url)
@@ -381,7 +403,7 @@ def convert_url():
                     conv_kwargs["llm_model"] = model or "gpt-4o-mini"
                 elif provider == "anthropic":
                     conv_kwargs["llm_client"] = ClaudeAdapter(api_key=key)
-                    conv_kwargs["llm_model"] = model or "claude-3-5-sonnet-latest"
+                    conv_kwargs["llm_model"] = model or "claude-sonnet-4-6"
                 elif provider == "custom":
                     from openai import OpenAI
                     conv_kwargs["llm_client"] = OpenAI(api_key=key, base_url=base_url)
@@ -496,6 +518,18 @@ def save_file():
     except Exception as exc:
         traceback.print_exc()
         return jsonify({"error": str(exc)}), 500
+
+
+@app.route("/api/settings", methods=["GET"])
+def get_settings():
+    return jsonify(read_config())
+
+
+@app.route("/api/settings", methods=["POST"])
+def save_settings_api():
+    data = request.get_json(force=True, silent=True) or {}
+    write_config(data)
+    return jsonify({"status": "saved"})
 
 
 @app.route("/health")
