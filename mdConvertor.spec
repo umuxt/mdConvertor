@@ -25,6 +25,20 @@ try:
 except Exception:
     mammoth_datas = []
 
+# Collect yt-dlp data files (YouTube extractor plugins)
+try:
+    ytdlp_datas = collect_data_files('yt_dlp')
+    ytdlp_hidden = collect_submodules('yt_dlp')
+except Exception:
+    ytdlp_datas = []
+    ytdlp_hidden = []
+
+# ebooklib for EPub support
+try:
+    epub_datas = collect_data_files('ebooklib')
+except Exception:
+    epub_datas = []
+
 # Include template folder
 templates_src = os.path.join(os.path.dirname(os.path.abspath(SPEC)), 'templates')
 
@@ -38,6 +52,8 @@ a = Analysis(
         *magika_datas,
         *onnx_datas,
         *mammoth_datas,
+        *ytdlp_datas,
+        *epub_datas,
     ],
     hiddenimports=[
         'markitdown',
@@ -60,7 +76,16 @@ a = Analysis(
         'pydub',
         'chardet',
         'charset_normalizer',
+        'ebooklib',
+        'extract_msg',
+        'yt_dlp',
+        'youtube_transcript_api',
+        'pdfminer',
+        'pdfplumber',
+        'xlrd',
+        'lxml',
         *markitdown_hidden,
+        *ytdlp_hidden,
     ],
     hookspath=[],
     runtime_hooks=[],

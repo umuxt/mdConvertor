@@ -4,3 +4,5 @@ pywebview
 pyinstaller
 yt-dlp
 youtube-transcript-api
+extract-msg
+ebooklib
