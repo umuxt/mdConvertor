@@ -1,3 +1,19 @@
+## What's New in v1.1.0
+
+This release brings size optimizations, cleaner resource management, and AI-powered Vision OCR capabilities.
+
+### ✨ Features & Optimizations
+- **Optional OpenAI Vision OCR Settings:** Added a collapsible Settings Panel in the UI where users can paste their OpenAI API Key and select a model (e.g., `gpt-4o` or `gpt-4o-mini`). This enables:
+  - Full-page OCR for scanned PDFs
+  - Extracting text from images inside DOCX, PPTX, and XLSX files
+  - Automated detailed descriptions/captions for image files
+- **localStorage Saving:** Your API Key and model selections are automatically saved securely in the browser's localStorage.
+- **Application Size Optimization (~42 MB saved):** Filtered out unused pocketsphinx dil dosyaları and non-macOS flac binary dependencies during packaging.
+- **Zero yt-dlp Cache Clutter:** Disabled caching in `yt-dlp` to prevent writing clutter folders to `~/.cache/yt-dlp`.
+- **Automatic Temp Cleanup:** Uploaded files are immediately deleted from temporary storage right after conversion, ensuring zero system pollution.
+
+---
+
 ## What's New in v1.0.0
 
 First public release of **mdConvertor** — a native macOS desktop app that converts any file to Markdown in seconds.
@@ -12,7 +28,7 @@ First public release of **mdConvertor** — a native macOS desktop app that conv
 - **Native macOS window:** Uses WKWebView — no Electron, lightweight and fast
 
 ### 📦 Installation
-1. Download `mdConvertor-1.0.0-macOS.dmg`
+1. Download `mdConvertor-x.x.x-macOS.dmg`
 2. Open the DMG → drag **mdConvertor** to **Applications**
 3. **First launch:** Right-click → Open (to bypass Gatekeeper on unsigned apps)
 

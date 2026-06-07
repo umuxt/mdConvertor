@@ -22,6 +22,97 @@ TEMPLATE_DIR = os.environ.get(
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates"),
 )
 
+# ── Claude (Anthropic) to OpenAI Client Adapter ──────────────────────────────
+class ClaudeAdapter:
+    def __init__(self, api_key: str):
+        self.api_key = api_key
+        self.chat = self.Chat(api_key)
+
+    class Chat:
+        def __init__(self, api_key: str):
+            self.completions = self.Completions(api_key)
+
+        class Completions:
+            def __init__(self, api_key: str):
+                self.api_key = api_key
+
+            def create(self, model: str, messages: list, **kwargs):
+                import requests
+                anthropic_content = []
+                for msg in messages:
+                    if msg.get("role") == "user":
+                        content = msg.get("content")
+                        if isinstance(content, list):
+                            for item in content:
+                                if item.get("type") == "text":
+                                    anthropic_content.append({
+                                        "type": "text",
+                                        "text": item.get("text")
+                                    })
+                                elif item.get("type") == "image_url":
+                                    img_url = item.get("image_url", {}).get("url", "")
+                                    if img_url.startswith("data:"):
+                                        header, data = img_url.split(",", 1)
+                                        media_type = header.split(";")[0].split(":", 1)[1]
+                                        anthropic_content.append({
+                                            "type": "image",
+                                            "source": {
+                                                "type": "base64",
+                                                "media_type": media_type,
+                                                "data": data
+                                            }
+                                        })
+                        elif isinstance(content, str):
+                            anthropic_content.append({
+                                "type": "text",
+                                "text": content
+                            })
+
+                headers = {
+                    "x-api-key": self.api_key,
+                    "anthropic-version": "2023-06-01",
+                    "content-type": "application/json"
+                }
+
+                claude_model = model
+                if "gpt" in model or not model:
+                    claude_model = "claude-3-5-sonnet-20241022"
+
+                payload = {
+                    "model": claude_model,
+                    "max_tokens": 4096,
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": anthropic_content
+                        }
+                    ]
+                }
+
+                resp = requests.post("https://api.anthropic.com/v1/messages", json=payload, headers=headers)
+                resp.raise_for_status()
+                res_data = resp.json()
+
+                content_text = ""
+                for content_block in res_data.get("content", []):
+                    if content_block.get("type") == "text":
+                        content_text += content_block.get("text", "")
+
+                class Choice:
+                    class Message:
+                        def __init__(self, text):
+                            self.content = text
+                        def __str__(self):
+                            return self.content
+                    def __init__(self, text):
+                        self.message = self.Message(text)
+
+                class OpenAIStyleResponse:
+                    def __init__(self, text):
+                        self.choices = [Choice(text)]
+
+                return OpenAIStyleResponse(content_text)
+
 app = Flask(__name__, template_folder=TEMPLATE_DIR)
 app.config["MAX_CONTENT_LENGTH"] = 256 * 1024 * 1024  # 256 MB upload limit
 
@@ -83,40 +174,79 @@ def convert_youtube(url: str) -> str:
         if len(upload_date) == 8:
             upload_date = f"{upload_date[:4]}-{upload_date[4:6]}-{upload_date[6:]}"
 
-        # Try to get transcript via youtube-transcript-api
+        # Try to get transcript via yt-dlp subtitles/automatic_captions URLs
         transcript_md = ""
         try:
-            from youtube_transcript_api import YouTubeTranscriptApi
-            from youtube_transcript_api.formatters import TextFormatter
-            match = YOUTUBE_RE.search(url)
-            if match:
-                video_id = match.group(1)
-                transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
-                # prefer manual, fall back to auto-generated
-                try:
-                    transcript = transcript_list.find_manually_created_transcript(
-                        ["tr", "en", "en-US", "en-GB"]
-                    )
-                except Exception:
-                    try:
-                        transcript = transcript_list.find_generated_transcript(
-                            ["tr", "en", "en-US"]
-                        )
-                    except Exception:
-                        transcript = next(iter(transcript_list))
+            import requests
 
-                entries = transcript.fetch()
-                lines = []
-                for entry in entries:
-                    t = entry.get("start", 0)
-                    m, s = divmod(int(t), 60)
-                    h, m = divmod(m, 60)
-                    ts = f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
-                    text = entry.get("text", "").replace("\n", " ").strip()
-                    if text:
-                        lines.append(f"**[{ts}]** {text}")
-                if lines:
-                    transcript_md = "\n\n## Transcript\n\n" + "\n\n".join(lines)
+            # 1. Determine available captions
+            captions_dict = info.get("subtitles") or {}
+            # Fall back to automatic captions if no manual subtitles
+            if not captions_dict:
+                captions_dict = info.get("automatic_captions") or {}
+
+            # 2. Prefer Turkish ('tr'), then English ('en', 'en-US', 'en-GB'), then default to the first language available
+            target_lang = None
+            for lang in ["tr", "tr-orig", "en", "en-US", "en-GB"]:
+                if lang in captions_dict:
+                    target_lang = lang
+                    break
+            if not target_lang and captions_dict:
+                target_lang = next(iter(captions_dict))
+
+            if target_lang:
+                formats = captions_dict[target_lang]
+                json3_format = next((f for f in formats if f.get("ext") == "json3"), None)
+                vtt_format = next((f for f in formats if f.get("ext") == "vtt"), None)
+
+                if json3_format:
+                    json3_url = json3_format.get("url")
+                    resp = requests.get(json3_url, timeout=10)
+                    resp.raise_for_status()
+                    data = resp.json()
+
+                    lines = []
+                    for ev in data.get("events", []):
+                        t_ms = ev.get("tStartMs", 0)
+                        segs = ev.get("segs", [])
+                        text = "".join(s.get("utf8", "") for s in segs).replace("\n", " ").strip()
+                        if text:
+                            # Format timestamp
+                            t_seconds = t_ms // 1000
+                            mins, secs = divmod(t_seconds, 60)
+                            hrs, mins = divmod(mins, 60)
+                            ts = f"{hrs}:{mins:02d}:{secs:02d}" if hrs else f"{mins}:{secs:02d}"
+                            lines.append(f"**[{ts}]** {text}")
+
+                    if lines:
+                        transcript_md = "\n\n## Transcript\n\n" + "\n\n".join(lines)
+                elif vtt_format:
+                    # Parse WebVTT format
+                    vtt_url = vtt_format.get("url")
+                    resp = requests.get(vtt_url, timeout=10)
+                    resp.raise_for_status()
+                    vtt_text = resp.text
+
+                    lines = []
+                    blocks = vtt_text.replace("\r\n", "\n").split("\n\n")
+                    for block in blocks:
+                        block = block.strip()
+                        if not block or "-->" not in block:
+                            continue
+                        parts = block.split("\n")
+                        time_line = parts[0]
+                        ts = time_line.split("-->")[0].strip().split(".")[0]
+                        if ts.startswith("00:"):
+                            ts = ts[3:]
+                        text_lines = [p.strip() for p in parts[1:] if p.strip()]
+                        text = " ".join(text_lines)
+                        if text:
+                            lines.append(f"**[{ts}]** {text}")
+
+                    if lines:
+                        transcript_md = "\n\n## Transcript\n\n" + "\n\n".join(lines)
+            else:
+                transcript_md = "\n\n> ⚠️ Transcript not available: No subtitle tracks found."
         except Exception as te:
             transcript_md = f"\n\n> ⚠️ Transcript not available: {te}"
 
@@ -171,8 +301,10 @@ def convert_file():
         return jsonify({"error": f"File type not supported: {file.filename}"}), 415
 
     ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else "bin"
+    provider = request.form.get("provider", "openai").strip()
     key = request.form.get("key", "").strip()
-    model = request.form.get("model", "gpt-4o-mini").strip()
+    model = request.form.get("model", "").strip()
+    base_url = request.form.get("base_url", "").strip()
     tmp_path = None
     try:
         with tempfile.NamedTemporaryFile(suffix=f".{ext}", delete=False) as tmp:
@@ -182,11 +314,19 @@ def convert_file():
         conv_kwargs = {}
         if key:
             try:
-                from openai import OpenAI
-                conv_kwargs["llm_client"] = OpenAI(api_key=key)
-                conv_kwargs["llm_model"] = model
+                if provider == "openai":
+                    from openai import OpenAI
+                    conv_kwargs["llm_client"] = OpenAI(api_key=key)
+                    conv_kwargs["llm_model"] = model or "gpt-4o-mini"
+                elif provider == "anthropic":
+                    conv_kwargs["llm_client"] = ClaudeAdapter(api_key=key)
+                    conv_kwargs["llm_model"] = model or "claude-3-5-sonnet-latest"
+                elif provider == "custom":
+                    from openai import OpenAI
+                    conv_kwargs["llm_client"] = OpenAI(api_key=key, base_url=base_url)
+                    conv_kwargs["llm_model"] = model
             except Exception as e:
-                return jsonify({"error": f"OpenAI initialization failed: {e}"}), 400
+                return jsonify({"error": f"LLM client initialization failed: {e}"}), 400
 
         result = md.convert(tmp_path, **conv_kwargs)
         markdown_text = result.text_content
@@ -228,24 +368,106 @@ def convert_url():
             })
 
         # Generic URL
+        provider = data.get("provider", "openai").strip()
         key = data.get("key", "").strip()
-        model = data.get("model", "gpt-4o-mini").strip()
+        model = data.get("model", "").strip()
+        base_url = data.get("base_url", "").strip()
         conv_kwargs = {}
         if key:
             try:
-                from openai import OpenAI
-                conv_kwargs["llm_client"] = OpenAI(api_key=key)
-                conv_kwargs["llm_model"] = model
+                if provider == "openai":
+                    from openai import OpenAI
+                    conv_kwargs["llm_client"] = OpenAI(api_key=key)
+                    conv_kwargs["llm_model"] = model or "gpt-4o-mini"
+                elif provider == "anthropic":
+                    conv_kwargs["llm_client"] = ClaudeAdapter(api_key=key)
+                    conv_kwargs["llm_model"] = model or "claude-3-5-sonnet-latest"
+                elif provider == "custom":
+                    from openai import OpenAI
+                    conv_kwargs["llm_client"] = OpenAI(api_key=key, base_url=base_url)
+                    conv_kwargs["llm_model"] = model
             except Exception as e:
-                return jsonify({"error": f"OpenAI initialization failed: {e}"}), 400
+                return jsonify({"error": f"LLM client initialization failed: {e}"}), 400
 
-        result = md.convert(url, **conv_kwargs)
-        markdown_text = result.text_content
-        return jsonify({
-            "markdown": markdown_text,
-            "filename": "converted-url.md",
-            "chars": len(markdown_text),
-        })
+        # Fetch generic URL with a browser User-Agent to bypass bot detection blocks
+        import urllib.parse
+        import requests
+        
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        }
+        resp = requests.get(url, headers=headers, timeout=20)
+        resp.raise_for_status()
+
+        # Determine extension based on Content-Type or URL path
+        content_type = resp.headers.get("Content-Type", "").split(";")[0].strip().lower()
+        
+        mime_map = {
+            "application/pdf": ".pdf",
+            "application/msword": ".doc",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
+            "application/vnd.ms-powerpoint": ".ppt",
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation": ".pptx",
+            "application/vnd.ms-excel": ".xls",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
+            "text/csv": ".csv",
+            "application/json": ".json",
+            "text/html": ".html",
+            "application/xml": ".xml",
+            "text/xml": ".xml",
+            "image/png": ".png",
+            "image/jpeg": ".jpg",
+            "image/gif": ".gif",
+            "image/webp": ".webp",
+            "audio/mpeg": ".mp3",
+            "audio/wav": ".wav",
+            "audio/ogg": ".ogg",
+            "audio/x-m4a": ".m4a",
+            "audio/flac": ".flac",
+            "application/epub+zip": ".epub",
+            "application/zip": ".zip",
+            "text/plain": ".txt",
+            "text/markdown": ".md",
+        }
+
+        ext = mime_map.get(content_type)
+        if not ext:
+            parsed = urllib.parse.urlparse(url)
+            path_ext = os.path.splitext(parsed.path)[1].lower()
+            if path_ext in ALLOWED_EXTENSIONS or (path_ext and path_ext[1:] in ALLOWED_EXTENSIONS):
+                ext = path_ext if path_ext.startswith(".") else f".{path_ext}"
+            else:
+                ext = ".html"  # Default fallback
+
+        # Use temporary file to convert
+        tmp_url_path = None
+        try:
+            with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp_url:
+                tmp_url_path = tmp_url.name
+                tmp_url.write(resp.content)
+
+            result = md.convert(tmp_url_path, **conv_kwargs)
+            markdown_text = result.text_content
+            
+            # Determine filename
+            parsed = urllib.parse.urlparse(url)
+            filename = os.path.basename(parsed.path) or "converted-url"
+            if not filename.endswith(ext):
+                filename = f"{filename}{ext}"
+            # Ensure it outputs as markdown filename
+            out_filename = filename.rsplit(".", 1)[0] + ".md"
+
+            return jsonify({
+                "markdown": markdown_text,
+                "filename": out_filename,
+                "chars": len(markdown_text),
+            })
+        finally:
+            if tmp_url_path:
+                try:
+                    os.unlink(tmp_url_path)
+                except Exception:
+                    pass
     except Exception as exc:
         traceback.print_exc()
         return jsonify({"error": str(exc)}), 500

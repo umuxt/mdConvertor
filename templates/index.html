@@ -365,8 +365,7 @@
     }
     .settings-panel.open .settings-body { display: block; }
     
-    .settings-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-bottom: 12px; }
-    @media(max-width: 600px) { .settings-grid { grid-template-columns: 1fr; } }
+    .settings-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 12px; }
     
     .settings-field { display: flex; flex-direction: column; gap: 6px; }
     .settings-field label { font-size: .72rem; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--tx2); }
@@ -409,18 +408,31 @@
     <div class="settings-body" id="settings-body">
       <div class="settings-grid">
         <div class="settings-field">
-          <label for="openai-api-key">OpenAI API Key</label>
-          <input type="password" id="openai-api-key" placeholder="Paste your sk-... key to enable OCR/Image description" autocomplete="off" />
-        </div>
-        <div class="settings-field">
-          <label for="openai-model">Vision Model</label>
-          <select id="openai-model">
-            <option value="gpt-4o-mini">gpt-4o-mini (Fast & Cheap)</option>
-            <option value="gpt-4o">gpt-4o (Most Accurate)</option>
+          <label for="llm-provider">API Provider</label>
+          <select id="llm-provider">
+            <option value="openai">OpenAI</option>
+            <option value="anthropic">Anthropic (Claude)</option>
+            <option value="custom">Custom (OpenAI Compatible)</option>
           </select>
         </div>
+        <div class="settings-field">
+          <label for="llm-api-key" id="lbl-api-key">OpenAI API Key</label>
+          <input type="password" id="llm-api-key" placeholder="Paste your API key here" autocomplete="off" />
+        </div>
+        <div class="settings-field" id="field-base-url" style="display:none;">
+          <label for="llm-base-url">Base URL</label>
+          <input type="text" id="llm-base-url" placeholder="https://api.yourprovider.com/v1" autocomplete="off" />
+        </div>
+        <div class="settings-field">
+          <label for="llm-model">Model</label>
+          <div id="model-container">
+            <select id="llm-model">
+              <!-- Dynamically populated -->
+            </select>
+          </div>
+        </div>
       </div>
-      <p class="settings-note">Providing your API Key enables AI-powered OCR for scanned PDFs, Word/PPTX images, and detailed captions for image files. If left blank, standard offline conversion is used.</p>
+      <p class="settings-note">Providing an API Key enables AI-powered OCR for scanned PDFs, Word/PPTX images, and detailed captions for image files. If left blank, standard offline conversion is used.</p>
     </div>
   </div>
 
@@ -509,26 +521,103 @@ let nextId = 1;
 
 /* ── Settings Panel Toggle & LocalStorage ────────────────────────────────── */
 const settingsToggle = document.getElementById('settings-toggle');
-const settingsPanel = settingsToggle.closest('.settings-panel');
-const apiKeyInput = document.getElementById('openai-api-key');
-const modelSelect = document.getElementById('openai-model');
+const settingsPanel  = settingsToggle.closest('.settings-panel');
+const providerSelect = document.getElementById('llm-provider');
+const apiKeyInput    = document.getElementById('llm-api-key');
+const apiKeyLabel    = document.getElementById('lbl-api-key');
+const baseUrlField   = document.getElementById('field-base-url');
+const baseUrlInput   = document.getElementById('llm-base-url');
+const modelContainer = document.getElementById('model-container');
 
-// Load settings
-apiKeyInput.value = localStorage.getItem('md_openai_api_key') || '';
-modelSelect.value = localStorage.getItem('md_openai_model') || 'gpt-4o-mini';
+// Load configurations
+providerSelect.value = localStorage.getItem('md_llm_provider') || 'openai';
+apiKeyInput.value    = localStorage.getItem('md_llm_api_key') || '';
+baseUrlInput.value   = localStorage.getItem('md_llm_base_url') || '';
+const savedModel     = localStorage.getItem('md_llm_model') || 'gpt-4o-mini';
 
-// Save settings on input/change
+// Update fields based on provider selection
+function updateFields() {
+  const provider = providerSelect.value;
+  localStorage.setItem('md_llm_provider', provider);
+
+  // Label and Base URL visibility
+  if (provider === 'openai') {
+    apiKeyLabel.textContent = 'OpenAI API Key';
+    apiKeyInput.placeholder = 'sk-...';
+    baseUrlField.style.display = 'none';
+    
+    // Model dropdown
+    modelContainer.innerHTML = `
+      <select id="llm-model">
+        <option value="gpt-4o-mini">gpt-4o-mini (Fast & Cheap)</option>
+        <option value="gpt-4o">gpt-4o (Most Accurate)</option>
+      </select>
+    `;
+  } else if (provider === 'anthropic') {
+    apiKeyLabel.textContent = 'Anthropic API Key';
+    apiKeyInput.placeholder = 'sk-ant-...';
+    baseUrlField.style.display = 'none';
+    
+    // Model dropdown
+    modelContainer.innerHTML = `
+      <select id="llm-model">
+        <option value="claude-3-5-sonnet-latest">claude-3-5-sonnet-latest</option>
+        <option value="claude-3-5-haiku-latest">claude-3-5-haiku-latest</option>
+      </select>
+    `;
+  } else if (provider === 'custom') {
+    apiKeyLabel.textContent = 'API Key';
+    apiKeyInput.placeholder = 'API Key (if required)';
+    baseUrlField.style.display = 'block';
+    
+    // Model text input
+    modelContainer.innerHTML = `
+      <input type="text" id="llm-model" placeholder="e.g. deepseek-chat or llama3" />
+    `;
+  }
+
+  // Restore model value if it matches the input type
+  const newModelEl = document.getElementById('llm-model');
+  if (newModelEl) {
+    if (newModelEl.tagName === 'SELECT') {
+      const options = Array.from(newModelEl.options).map(o => o.value);
+      if (options.includes(savedModel)) {
+        newModelEl.value = savedModel;
+      } else {
+        newModelEl.selectedIndex = 0;
+      }
+    } else {
+      newModelEl.value = savedModel;
+    }
+    
+    newModelEl.addEventListener('change', saveModel);
+    newModelEl.addEventListener('input', saveModel);
+  }
+}
+
+function saveModel() {
+  const modelEl = document.getElementById('llm-model');
+  if (modelEl) {
+    localStorage.setItem('md_llm_model', modelEl.value);
+  }
+}
+
+// Bind event listeners
+providerSelect.addEventListener('change', updateFields);
 apiKeyInput.addEventListener('input', () => {
-  localStorage.setItem('md_openai_api_key', apiKeyInput.value.trim());
+  localStorage.setItem('md_llm_api_key', apiKeyInput.value.trim());
 });
-modelSelect.addEventListener('change', () => {
-  localStorage.setItem('md_openai_model', modelSelect.value);
+baseUrlInput.addEventListener('input', () => {
+  localStorage.setItem('md_llm_base_url', baseUrlInput.value.trim());
 });
 
 // Toggle collapse
 settingsToggle.addEventListener('click', () => {
   settingsPanel.classList.toggle('open');
 });
+
+// Initialize on load
+updateFields();
 
 /* ── Sections ──────────────────────────────────────────────────────────── */
 function showSection(id) {
@@ -664,8 +753,10 @@ async function convertAll() {
           headers:{'Content-Type':'application/json'},
           body: JSON.stringify({
             url: item.url,
+            provider: providerSelect.value,
             key: apiKeyInput.value.trim(),
-            model: modelSelect.value
+            model: document.getElementById('llm-model').value,
+            base_url: baseUrlInput.value.trim()
           }),
         });
         data = await resp.json();
@@ -674,8 +765,10 @@ async function convertAll() {
         msgEl.textContent = 'Uploading & converting…';
         const fd = new FormData();
         fd.append('file', item.file);
+        fd.append('provider', providerSelect.value);
         fd.append('key', apiKeyInput.value.trim());
-        fd.append('model', modelSelect.value);
+        fd.append('model', document.getElementById('llm-model').value);
+        fd.append('base_url', baseUrlInput.value.trim());
         const resp = await fetch('/api/convert', { method:'POST', body:fd });
         data = await resp.json();
         if (!resp.ok || data.error) throw new Error(data.error || 'Conversion failed');
