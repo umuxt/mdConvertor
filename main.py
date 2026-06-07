@@ -63,7 +63,7 @@ def main() -> None:
         background_color="#0a0a0f",
     )
 
-    webview.start(debug=False)
+    webview.start(debug=False, private_mode=False)
 
 
 if __name__ == "__main__":
