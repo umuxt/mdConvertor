@@ -1,8 +1,38 @@
 # mdConvertor
 
-> A native macOS desktop application that converts PDF, Word, Excel, PowerPoint, images, audio, YouTube URLs, ZIP files, EPubs, and more into clean **Markdown** — in one click.
+> A native macOS desktop app that converts **PDF, Word, Excel, PowerPoint, images, audio, YouTube URLs, ZIP, EPub** and more into clean **Markdown** — in one click.
 
-Built with [MarkItDown](https://github.com/microsoft/markitdown) (Microsoft), [PyWebView](https://pywebview.flowrl.com) (native WKWebView), and Flask.
+Built with [MarkItDown](https://github.com/microsoft/markitdown) (Microsoft) · [PyWebView](https://pywebview.flowrl.com) · Flask
+
+---
+
+## ⬇️ Download & Install (macOS)
+
+### 1. Download the latest release
+
+👉 **[mdConvertor-1.0.0-macOS.dmg](https://github.com/umuxt/mdConvertor/releases/latest)** — GitHub Releases
+
+### 2. Install
+
+1. Open the downloaded `.dmg` file
+2. Drag **mdConvertor** → **Applications**
+3. Eject the disk image
+
+### 3. First launch (Gatekeeper bypass)
+
+Because the app is not from the App Store, macOS will warn you on first launch:
+
+**Option A — Right-click method (easiest):**
+> Right-click `mdConvertor.app` in Applications → **Open** → Click **Open** in the dialog
+
+**Option B — Terminal:**
+```bash
+xattr -cr /Applications/mdConvertor.app
+```
+
+After this, the app opens normally every time with a double-click.
+
+> **macOS version:** Requires macOS 11 Big Sur or later (Apple Silicon & Intel supported)
 
 ---
 
@@ -10,56 +40,66 @@ Built with [MarkItDown](https://github.com/microsoft/markitdown) (Microsoft), [P
 
 | Feature | Details |
 |---------|---------|
-| 📂 Drag & Drop | Drop any supported file onto the window |
-| 🔗 URL Support | YouTube, web pages, and more |
+| 📂 Multi-file Drop | Drop multiple files at once, then convert all |
+| 🔗 YouTube & URLs | Extracts title, channel, views, description + transcript |
 | ✂️ Split View | Raw Markdown + live rendered preview side by side |
-| 📋 Copy / Download | One-click copy or download as `.md` |
-| 🌑 Dark Mode | Premium dark UI with glassmorphism |
-| 📦 Native App | Runs as a real `.app` — no Electron overhead |
+| ⬇️ Save to Downloads | Files saved as `originalname-converted.md` to `~/Downloads` |
+| 🌑 Dark Mode | Premium glassmorphism UI |
+| 📦 Native Window | WKWebView — no Electron, fast & lightweight |
 
 ### Supported Formats
-`PDF` · `DOCX` · `PPTX` · `XLSX` · `CSV` · `JSON` · `HTML` · `PNG/JPG` · `MP3/WAV` · `YouTube URL` · `ZIP` · `EPub`
+`PDF` · `DOCX` · `PPTX` · `XLSX` · `XLS` · `CSV` · `JSON` · `HTML` · `PNG/JPG` · `MP3/WAV` · `EPub` · `Outlook .msg` · `ZIP` · `Jupyter .ipynb` · `YouTube URL` · `Wikipedia` · `RSS`
 
 ---
 
-## 🚀 Quick Start (Development)
+## 🖥 Platform Support
 
-### 1. Clone & enter the project
+| Platform | Support |
+|----------|---------|
+| macOS (Apple Silicon + Intel) | ✅ Native `.app` available |
+| Windows | 🔜 Planned |
+| Linux | 🔜 Planned |
+
+---
+
+## 🚀 Developer Setup (run from source)
+
+### Requirements
+- Python 3.10 or later
+- macOS (for PyWebView WKWebView)
+
+### Steps
+
 ```bash
-git clone git@github.com:umuxt/mdConvertor.git
+# 1. Clone
+git clone https://github.com/umuxt/mdConvertor.git
 cd mdConvertor
-```
 
-### 2. Create a virtual environment
-```bash
+# 2. Virtual environment
 python3 -m venv .venv
 source .venv/bin/activate
-```
 
-### 3. Install dependencies
-```bash
+# 3. Install dependencies
 pip install -r requirements.txt
-```
 
-### 4. Run the app
-```bash
+# 4. Run
 python main.py
 ```
 
-A native macOS window will open automatically.
-
----
-
-## 🏗️ Build as `.app` Bundle
+### Build .app Bundle
 
 ```bash
 chmod +x build.sh
 ./build.sh
+# → dist/mdConvertor.app
 ```
 
-The bundle will be at `dist/mdConvertor.app`. Open it from Finder or:
+### Create DMG Installer
+
 ```bash
-open dist/mdConvertor.app
+chmod +x create_dmg.sh
+./create_dmg.sh
+# → dist/mdConvertor-1.0.0-macOS.dmg
 ```
 
 ---
@@ -69,28 +109,26 @@ open dist/mdConvertor.app
 ```
 mdConvertor/
 ├── main.py              # Entry point: Flask thread + PyWebView window
-├── server.py            # Flask API (/api/convert, /api/convert-url)
+├── server.py            # Flask API (/api/convert, /api/convert-url, /api/save)
 ├── templates/
 │   └── index.html       # Full UI (drag & drop, dark mode, split panels)
 ├── requirements.txt     # Python dependencies
 ├── build.sh             # PyInstaller build script
-└── mdConvertor.spec     # PyInstaller spec (onedir, sys._MEIPASS)
+├── create_dmg.sh        # DMG installer creator
+├── mdConvertor.spec     # PyInstaller spec (onedir, sys._MEIPASS)
+└── RELEASE_NOTES.md     # Release changelog
 ```
 
 ---
 
 ## 🛠️ Tech Stack
 
-- **Backend**: Python 3.11+ · Flask · MarkItDown
-- **Frontend**: Vanilla HTML/CSS/JS · marked.js (rendering)
-- **Desktop Window**: PyWebView (native macOS WKWebView)
-- **Packaging**: PyInstaller (onedir, `.app` bundle)
-
----
-
-## 📸 Screenshot
-
-> _Screenshot coming soon_
+- **Conversion engine**: [MarkItDown](https://github.com/microsoft/markitdown) (Microsoft) — 18 format converters
+- **Desktop window**: [PyWebView](https://pywebview.flowrl.com) — native macOS WKWebView
+- **API**: Flask (runs locally, no network required)
+- **YouTube**: yt-dlp + youtube-transcript-api
+- **Packaging**: PyInstaller (onedir `.app` bundle)
+- **UI**: Vanilla HTML/CSS/JS + marked.js
 
 ---
 
