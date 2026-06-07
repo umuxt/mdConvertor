@@ -25,7 +25,7 @@ TEMPLATE_DIR = os.environ.get(
 app = Flask(__name__, template_folder=TEMPLATE_DIR)
 app.config["MAX_CONTENT_LENGTH"] = 256 * 1024 * 1024  # 256 MB upload limit
 
-md = MarkItDown()
+md = MarkItDown(enable_plugins=True)
 
 # ── Allowed extensions ────────────────────────────────────────────────────────
 ALLOWED_EXTENSIONS = {
@@ -58,6 +58,7 @@ def convert_youtube(url: str) -> str:
             "skip_download": True,
             "writesubtitles": False,
             "writeautomaticsub": False,
+            "cachedir": False,  # Disable caching to prevent disk clutter
         }
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -170,13 +171,24 @@ def convert_file():
         return jsonify({"error": f"File type not supported: {file.filename}"}), 415
 
     ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else "bin"
+    key = request.form.get("key", "").strip()
+    model = request.form.get("model", "gpt-4o-mini").strip()
     tmp_path = None
     try:
         with tempfile.NamedTemporaryFile(suffix=f".{ext}", delete=False) as tmp:
             tmp_path = tmp.name
             file.save(tmp_path)
 
-        result = md.convert(tmp_path)
+        conv_kwargs = {}
+        if key:
+            try:
+                from openai import OpenAI
+                conv_kwargs["llm_client"] = OpenAI(api_key=key)
+                conv_kwargs["llm_model"] = model
+            except Exception as e:
+                return jsonify({"error": f"OpenAI initialization failed: {e}"}), 400
+
+        result = md.convert(tmp_path, **conv_kwargs)
         markdown_text = result.text_content
 
         return jsonify({
@@ -216,7 +228,18 @@ def convert_url():
             })
 
         # Generic URL
-        result = md.convert(url)
+        key = data.get("key", "").strip()
+        model = data.get("model", "gpt-4o-mini").strip()
+        conv_kwargs = {}
+        if key:
+            try:
+                from openai import OpenAI
+                conv_kwargs["llm_client"] = OpenAI(api_key=key)
+                conv_kwargs["llm_model"] = model
+            except Exception as e:
+                return jsonify({"error": f"OpenAI initialization failed: {e}"}), 400
+
+        result = md.convert(url, **conv_kwargs)
         markdown_text = result.text_content
         return jsonify({
             "markdown": markdown_text,

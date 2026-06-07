@@ -6,3 +6,6 @@ yt-dlp
 youtube-transcript-api
 extract-msg
 ebooklib
+markitdown-ocr
+openai
+

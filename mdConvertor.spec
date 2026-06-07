@@ -2,7 +2,7 @@
 # Use --onedir (not --onefile) for better macOS stability.
 
 import os
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules, copy_metadata
 
 block_cipher = None
 
@@ -39,6 +39,14 @@ try:
 except Exception:
     epub_datas = []
 
+# markitdown-ocr metadata and submodules
+try:
+    ocr_metadata = copy_metadata('markitdown-ocr')
+    ocr_hidden = collect_submodules('markitdown_ocr')
+except Exception:
+    ocr_metadata = []
+    ocr_hidden = []
+
 # Include template folder
 templates_src = os.path.join(os.path.dirname(os.path.abspath(SPEC)), 'templates')
 
@@ -54,6 +62,7 @@ a = Analysis(
         *mammoth_datas,
         *ytdlp_datas,
         *epub_datas,
+        *ocr_metadata,
     ],
     hiddenimports=[
         'markitdown',
@@ -84,8 +93,11 @@ a = Analysis(
         'pdfplumber',
         'xlrd',
         'lxml',
+        'fitz',
+        'openai',
         *markitdown_hidden,
         *ytdlp_hidden,
+        *ocr_hidden,
     ],
     hookspath=[],
     runtime_hooks=[],
@@ -95,6 +107,9 @@ a = Analysis(
     cipher=block_cipher,
     noarchive=False,
 )
+
+# Filter out pocketsphinx-data and non-macOS binaries to save space
+a.datas = [d for d in a.datas if 'pocketsphinx-data' not in d[0] and 'pocketsphinx-data' not in d[1] and not any(x in d[0] for x in ['flac-linux', 'flac-win32.exe'])]
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
