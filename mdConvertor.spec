@@ -1,0 +1,82 @@
+# mdConvertor.spec — PyInstaller spec file
+# Use --onedir (not --onefile) for better macOS stability.
+
+import os
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+
+block_cipher = None
+
+# Collect all markitdown data/submodule files
+markitdown_datas = collect_data_files('markitdown')
+markitdown_hidden = collect_submodules('markitdown')
+
+# Include template folder
+templates_src = os.path.join(os.path.dirname(os.path.abspath(SPEC)), 'templates')
+
+a = Analysis(
+    ['main.py'],
+    pathex=[os.path.dirname(os.path.abspath(SPEC))],
+    binaries=[],
+    datas=[
+        (templates_src, 'templates'),
+        *markitdown_datas,
+    ],
+    hiddenimports=[
+        'markitdown',
+        'flask',
+        'webview',
+        'webview.platforms.cocoa',
+        'jinja2',
+        'werkzeug',
+        'markitdown._markitdown',
+        *markitdown_hidden,
+    ],
+    hookspath=[],
+    runtime_hooks=[],
+    excludes=[],
+    win_no_prefer_redirects=False,
+    win_private_assemblies=False,
+    cipher=block_cipher,
+    noarchive=False,
+)
+
+pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+
+exe = EXE(
+    pyz,
+    a.scripts,
+    [],
+    exclude_binaries=True,
+    name='mdConvertor',
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=True,
+    console=False,    # No terminal window on macOS
+    codesign_identity=None,
+)
+
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    strip=False,
+    upx=True,
+    upx_exclude=[],
+    name='mdConvertor',
+)
+
+app = BUNDLE(
+    coll,
+    name='mdConvertor.app',
+    icon=None,
+    bundle_identifier='com.mdconvertor.app',
+    info_plist={
+        'CFBundleDisplayName': 'mdConvertor',
+        'CFBundleShortVersionString': '1.0.0',
+        'CFBundleVersion': '1.0.0',
+        'NSHighResolutionCapable': True,
+        'NSRequiresAquaSystemAppearance': False,
+    },
+)

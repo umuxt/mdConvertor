@@ -1,0 +1,4 @@
+markitdown[all]
+flask
+pywebview
+pyinstaller
