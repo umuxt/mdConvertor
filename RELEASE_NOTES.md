@@ -1,8 +1,9 @@
-## What's New in v1.2.0
+## What's New in v1.3.0
 
-This release fixes external web services integration, resolves bot-detection blocks, and includes robust YouTube transcription.
+This release fixes external web services integration, resolves bot-detection blocks, robustifies YouTube transcription, and enables persistent local storage for API settings.
 
 ### 🐛 Bug Fixes & Service Upgrades
+- **Settings Persistence (API Key & Model):** Fixed the settings drawer not saving the entered API Key or provider model on app reload. Disabled private mode in PyWebView and set a dedicated App Support storage directory so values are remembered forever.
 - **Robust YouTube Transcript Retrieval:** Replaced the legacy `youtube-transcript-api` (which returned empty XML parsing errors due to anti-bot rate-limiting) with a native `yt-dlp` timedtext extractor that fetches and parses `json3`/`vtt` subtitle streams natively using `requests`.
 - **Wikipedia & URL Fetching Fixes (User-Agent):** Requests for generic URLs (like Wikipedia) are now fetched using a standard browser `User-Agent` to bypass scraper blocking (`403 Forbidden`). Fetched assets are written to a temporary file before being converted.
 

@@ -63,7 +63,9 @@ def main() -> None:
         background_color="#0a0a0f",
     )
 
-    webview.start(debug=False, private_mode=False)
+    storage_dir = os.path.expanduser("~/Library/Application Support/mdConvertor")
+    os.makedirs(storage_dir, exist_ok=True)
+    webview.start(debug=False, private_mode=False, storage_path=storage_dir)
 
 
 if __name__ == "__main__":

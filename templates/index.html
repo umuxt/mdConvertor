@@ -604,12 +604,20 @@ function saveModel() {
 
 // Bind event listeners
 providerSelect.addEventListener('change', updateFields);
-apiKeyInput.addEventListener('input', () => {
+
+function saveApiKey() {
   localStorage.setItem('md_llm_api_key', apiKeyInput.value.trim());
-});
-baseUrlInput.addEventListener('input', () => {
+}
+apiKeyInput.addEventListener('input', saveApiKey);
+apiKeyInput.addEventListener('change', saveApiKey);
+apiKeyInput.addEventListener('blur', saveApiKey);
+
+function saveBaseUrl() {
   localStorage.setItem('md_llm_base_url', baseUrlInput.value.trim());
-});
+}
+baseUrlInput.addEventListener('input', saveBaseUrl);
+baseUrlInput.addEventListener('change', saveBaseUrl);
+baseUrlInput.addEventListener('blur', saveBaseUrl);
 
 // Toggle collapse
 settingsToggle.addEventListener('click', () => {
