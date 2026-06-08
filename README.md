@@ -45,7 +45,7 @@ Built with [MarkItDown](https://github.com/microsoft/markitdown) (Microsoft) · 
 | Platform | Support |
 |----------|---------|
 | macOS (Apple Silicon + Intel) | ✅ Native `.app` available |
-| Windows | 🔜 Planned |
+| Windows | ✅ ZIP executable (`.exe`) available |
 | Linux | 🔜 Planned |
 
 ---
