@@ -58,7 +58,7 @@ jobs:
 
       - name: Build Windows App
         run: |
-          build.bat
+          ./build.bat
 
       - name: Zip Windows App
         run: |

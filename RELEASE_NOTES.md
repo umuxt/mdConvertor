@@ -1,3 +1,12 @@
+## What's New in v1.4.4
+
+This release fixes the batch execution command on Windows runners in the GitHub Actions workflow.
+
+### ⚙️ CI/CD Updates
+- **Windows Workflow Fix:** Prefixed the `build.bat` call with `./` to allow it to be resolved and executed properly under the PowerShell runner environment on Windows.
+
+---
+
 ## What's New in v1.4.3
 
 This release updates the project versioning metadata and ensures all workflow configuration changes are correctly pushed to GitHub.

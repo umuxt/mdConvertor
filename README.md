@@ -67,7 +67,7 @@ After this, the app opens normally every time with a double-click.
 
 ### Requirements
 - Python 3.10 or later
-- macOS (for PyWebView WKWebView)
+- macOS or Windows
 
 ### Steps
 
@@ -77,8 +77,13 @@ git clone https://github.com/umuxt/mdConvertor.git
 cd mdConvertor
 
 # 2. Virtual environment
+# On macOS:
 python3 -m venv .venv
 source .venv/bin/activate
+
+# On Windows:
+python -m venv .venv
+.venv\Scripts\activate
 
 # 3. Install dependencies
 pip install -r requirements.txt
@@ -87,20 +92,27 @@ pip install -r requirements.txt
 python main.py
 ```
 
-### Build .app Bundle
+### Build App Bundle
 
+**On macOS:**
 ```bash
 chmod +x build.sh
 ./build.sh
 # → dist/mdConvertor.app
 ```
 
-### Create DMG Installer
+**On Windows:**
+```cmd
+build.bat
+# → dist/mdConvertor/mdConvertor.exe
+```
+
+### Create DMG Installer (macOS only)
 
 ```bash
 chmod +x create_dmg.sh
 ./create_dmg.sh
-# → dist/mdConvertor-1.4.3-macOS.dmg
+# → dist/mdConvertor-1.4.4-macOS.dmg
 ```
 
 ---
