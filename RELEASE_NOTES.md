@@ -1,3 +1,12 @@
+## What's New in v1.4.3
+
+This release updates the project versioning metadata and ensures all workflow configuration changes are correctly pushed to GitHub.
+
+### ⚙️ CI/CD Updates
+- **Workflow Build Fix:** Corrected action step references in the GitHub Actions configuration to ensure successful remote builds for both macOS and Windows.
+
+---
+
 ## What's New in v1.4.2
 
 This release fixes the Flask request context unbound error during real-time streaming conversion, ensuring a seamless and error-free execution flow.
