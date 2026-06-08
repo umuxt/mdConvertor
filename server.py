@@ -194,7 +194,7 @@ def _call_llm_for_image(llm_client, llm_model, img_b64: str, mime_type: str, lan
         return f"[Image description failed: {e}]"
 
 
-def extract_pdf_images_with_descriptions(pdf_path: str, llm_client, llm_model: str, lang: str = "en") -> dict:
+def extract_pdf_images_with_descriptions(pdf_path: str, llm_client, llm_model: str, lang: str = "en", progress_callback=None) -> dict:
     """
     Extract images from a PDF using PyMuPDF, send each to the LLM for
     description, and return a dict mapping page numbers to descriptions.
@@ -202,19 +202,20 @@ def extract_pdf_images_with_descriptions(pdf_path: str, llm_client, llm_model: s
     """
     import fitz  # PyMuPDF
     import base64
+    from concurrent.futures import ThreadPoolExecutor, as_completed
 
     descriptions = {}  # {page_num (1-indexed): [desc, ...]}
-    image_count = 0
+    images_to_process = []  # list of dicts: {"page_num": int, "img_b64": str, "mime_type": str}
 
     try:
         doc = fitz.open(pdf_path)
         for page_num in range(len(doc)):
-            if image_count >= MAX_IMAGES:
+            if len(images_to_process) >= MAX_IMAGES:
                 break
             page = doc[page_num]
             images = page.get_images(full=True)
             for img_info in images:
-                if image_count >= MAX_IMAGES:
+                if len(images_to_process) >= MAX_IMAGES:
                     break
                 xref = img_info[0]
                 try:
@@ -227,12 +228,52 @@ def extract_pdf_images_with_descriptions(pdf_path: str, llm_client, llm_model: s
                 img_b64 = base64.b64encode(base_img["image"]).decode("utf-8")
                 ext = base_img["ext"]
                 mime_type = f"image/{'jpeg' if ext in ('jpg', 'jpeg') else ext}"
-                desc = _call_llm_for_image(llm_client, llm_model, img_b64, mime_type, lang)
-                descriptions.setdefault(page_num + 1, []).append(desc)
-                image_count += 1
+                images_to_process.append({
+                    "page_num": page_num + 1,
+                    "img_b64": img_b64,
+                    "mime_type": mime_type
+                })
         doc.close()
     except Exception as e:
         print(f"[PDF image extraction error]: {e}", flush=True)
+
+    if not images_to_process:
+        return descriptions
+
+    total_images = len(images_to_process)
+    if progress_callback:
+        progress_callback(f"Extracted {total_images} images. Starting AI descriptions in parallel...")
+
+    # Call LLM in parallel
+    results_ordered = [None] * total_images
+    with ThreadPoolExecutor(max_workers=min(5, total_images)) as executor:
+        futures = {}
+        for idx, img_data in enumerate(images_to_process):
+            future = executor.submit(
+                _call_llm_for_image,
+                llm_client,
+                llm_model,
+                img_data["img_b64"],
+                img_data["mime_type"],
+                lang
+            )
+            futures[future] = idx
+
+        completed_count = 0
+        for future in as_completed(futures):
+            idx = futures[future]
+            completed_count += 1
+            try:
+                desc = future.result()
+            except Exception as e:
+                desc = f"[Image description error: {e}]"
+            results_ordered[idx] = desc
+            if progress_callback:
+                progress_callback(f"Described image {completed_count}/{total_images}...")
+
+    for idx, img_data in enumerate(images_to_process):
+        desc = results_ordered[idx]
+        descriptions.setdefault(img_data["page_num"], []).append(desc)
 
     return descriptions
 
@@ -432,6 +473,246 @@ def convert_youtube(url: str) -> str:
 @app.route("/")
 def index():
     return render_template("index.html")
+
+
+@app.route("/api/convert-stream", methods=["POST"])
+def convert_stream():
+    from flask import Response
+    import json
+
+    url = request.form.get("url", "").strip()
+    provider = request.form.get("provider", "openai").strip()
+    key = request.form.get("key", "").strip()
+    model = request.form.get("model", "").strip()
+    base_url = request.form.get("base_url", "").strip()
+    img_desc_lang = request.form.get("img_desc_lang", "en").strip() or "en"
+
+    def generator():
+        def emit(status, message="", data=None):
+            payload = {"status": status, "message": message}
+            if data:
+                payload.update(data)
+            return f"data: {json.dumps(payload)}\n\n"
+
+        yield emit("info", "Starting conversion...")
+
+        tmp_path = None
+        ext = None
+        orig_filename = None
+
+        try:
+            if url:
+                yield emit("info", f"Analyzing URL...")
+                if YOUTUBE_RE.search(url):
+                    yield emit("info", "Extracting YouTube metadata & transcript (this may take a moment)...")
+                    try:
+                        markdown_text = convert_youtube(url)
+                        match = YOUTUBE_RE.search(url)
+                        video_id = match.group(1) if match else "video"
+                        yield emit("done", "YouTube conversion complete", {
+                            "markdown": markdown_text,
+                            "filename": f"youtube-{video_id}.md",
+                            "chars": len(markdown_text)
+                        })
+                        return
+                    except Exception as e:
+                        yield emit("error", f"YouTube conversion failed: {e}")
+                        return
+
+                yield emit("info", "Downloading URL contents...")
+                import urllib.parse
+                import requests
+                headers = {
+                    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                }
+                resp = requests.get(url, headers=headers, timeout=20)
+                resp.raise_for_status()
+
+                content_type = resp.headers.get("Content-Type", "").split(";")[0].strip().lower()
+                suffix = None
+                
+                mime_map = {
+                    "application/pdf": ".pdf",
+                    "application/msword": ".doc",
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
+                    "application/vnd.ms-powerpoint": ".ppt",
+                    "application/vnd.openxmlformats-officedocument.presentationml.presentation": ".pptx",
+                    "application/vnd.ms-excel": ".xls",
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
+                    "text/csv": ".csv",
+                    "application/json": ".json",
+                    "text/html": ".html",
+                    "application/xml": ".xml",
+                    "text/xml": ".xml",
+                    "image/png": ".png",
+                    "image/jpeg": ".jpg",
+                    "image/gif": ".gif",
+                    "image/webp": ".webp",
+                    "audio/mpeg": ".mp3",
+                    "audio/wav": ".wav",
+                    "audio/ogg": ".ogg",
+                    "audio/x-m4a": ".m4a",
+                    "audio/flac": ".flac",
+                    "application/epub+zip": ".epub",
+                    "application/zip": ".zip",
+                    "text/plain": ".txt",
+                    "text/markdown": ".md",
+                }
+                
+                suffix = mime_map.get(content_type)
+                if not suffix:
+                    parsed = urllib.parse.urlparse(url)
+                    path = parsed.path
+                    if "." in path:
+                        suffix = "." + path.rsplit(".", 1)[-1].lower()
+                    else:
+                        suffix = ".html"
+
+                ext = suffix.lstrip(".")
+                parsed_url = urllib.parse.urlparse(url)
+                orig_filename = os.path.basename(parsed_url.path) or "webpage"
+                if not orig_filename.lower().endswith(suffix):
+                    orig_filename += suffix
+
+                with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+                    tmp_path = tmp.name
+                    tmp.write(resp.content)
+            else:
+                if "file" not in request.files:
+                    yield emit("error", "No file part in request")
+                    return
+                file = request.files["file"]
+                if file.filename == "":
+                    yield emit("error", "No file selected")
+                    return
+                if not allowed_file(file.filename):
+                    yield emit("error", f"File type not supported: {file.filename}")
+                    return
+
+                orig_filename = file.filename
+                ext = orig_filename.rsplit(".", 1)[-1].lower() if "." in orig_filename else "bin"
+                
+                yield emit("info", "Saving uploaded file to local temp space...")
+                with tempfile.NamedTemporaryFile(suffix=f".{ext}", delete=False) as tmp:
+                    tmp_path = tmp.name
+                    file.save(tmp_path)
+
+            conv_kwargs = {}
+            if key:
+                yield emit("info", "Setting up AI client for OCR / descriptions...")
+                try:
+                    if provider == "openai":
+                        from openai import OpenAI
+                        conv_kwargs["llm_client"] = OpenAI(api_key=key)
+                        conv_kwargs["llm_model"] = model or "gpt-4o-mini"
+                    elif provider == "anthropic":
+                        conv_kwargs["llm_client"] = ClaudeAdapter(api_key=key)
+                        conv_kwargs["llm_model"] = model or "claude-sonnet-4-6"
+                    elif provider == "custom":
+                        from openai import OpenAI
+                        conv_kwargs["llm_client"] = OpenAI(api_key=key, base_url=base_url)
+                        conv_kwargs["llm_model"] = model
+                except Exception as e:
+                    yield emit("error", f"AI client initialization failed: {e}")
+                    return
+
+            yield emit("info", "Running document extraction engines (this may take up to a minute)...")
+            result = md.convert(tmp_path, **conv_kwargs)
+            markdown_text = result.text_content
+            yield emit("info", "Text extraction complete.")
+
+            # PDF image extraction and parallel descriptions
+            if ext == "pdf" and conv_kwargs.get("llm_client") and conv_kwargs.get("llm_model"):
+                yield emit("info", "Scanning PDF for images...")
+                import fitz
+                import base64
+                from concurrent.futures import ThreadPoolExecutor, as_completed
+
+                images_to_process = []
+                try:
+                    doc = fitz.open(tmp_path)
+                    for page_num in range(len(doc)):
+                        if len(images_to_process) >= MAX_IMAGES:
+                            break
+                        page = doc[page_num]
+                        images = page.get_images(full=True)
+                        for img_info in images:
+                            if len(images_to_process) >= MAX_IMAGES:
+                                break
+                            xref = img_info[0]
+                            try:
+                                base_img = doc.extract_image(xref)
+                            except Exception:
+                                continue
+                            if base_img["width"] < MIN_IMAGE_DIM or base_img["height"] < MIN_IMAGE_DIM:
+                                continue
+                            img_b64 = base64.b64encode(base_img["image"]).decode("utf-8")
+                            ext_img = base_img["ext"]
+                            mime_type = f"image/{'jpeg' if ext_img in ('jpg', 'jpeg') else ext_img}"
+                            images_to_process.append({
+                                "page_num": page_num + 1,
+                                "img_b64": img_b64,
+                                "mime_type": mime_type
+                            })
+                    doc.close()
+                except Exception as e:
+                    yield emit("info", f"Scanning PDF images failed: {e}")
+
+                if images_to_process:
+                    total_images = len(images_to_process)
+                    yield emit("info", f"Found {total_images} images. Generating AI descriptions in parallel...")
+                    
+                    results_ordered = [None] * total_images
+                    with ThreadPoolExecutor(max_workers=min(5, total_images)) as executor:
+                        futures = {}
+                        for idx, img_data in enumerate(images_to_process):
+                            future = executor.submit(
+                                _call_llm_for_image,
+                                conv_kwargs["llm_client"],
+                                conv_kwargs["llm_model"],
+                                img_data["img_b64"],
+                                img_data["mime_type"],
+                                img_desc_lang
+                            )
+                            futures[future] = idx
+
+                        completed_count = 0
+                        for future in as_completed(futures):
+                            idx = futures[future]
+                            completed_count += 1
+                            try:
+                                desc = future.result()
+                            except Exception as e:
+                                desc = f"[Image description error: {e}]"
+                            results_ordered[idx] = desc
+                            yield emit("info", f"Described image {completed_count}/{total_images}...")
+
+                    img_descs = {}
+                    for idx, img_data in enumerate(images_to_process):
+                        desc = results_ordered[idx]
+                        img_descs.setdefault(img_data["page_num"], []).append(desc)
+
+                    if img_descs:
+                        markdown_text = _merge_image_descriptions(markdown_text, img_descs, img_desc_lang)
+                        yield emit("info", "Injected image descriptions into Markdown.")
+
+            yield emit("done", "All tasks complete", {
+                "markdown": markdown_text,
+                "filename": orig_filename,
+                "chars": len(markdown_text)
+            })
+
+        except Exception as exc:
+            traceback.print_exc()
+            yield emit("error", f"Conversion failed: {exc}")
+        finally:
+            if tmp_path:
+                try:
+                    os.unlink(tmp_path)
+                except Exception:
+                    pass
+
+    return Response(generator(), mimetype="text/event-stream")
 
 
 @app.route("/api/convert", methods=["POST"])

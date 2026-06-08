@@ -790,8 +790,15 @@ async function convertAll() {
     el.innerHTML = `
       <div class="prog-status"><div class="mini-spinner"></div></div>
       <div class="prog-info">
-        <div class="prog-name">${escHtml(item.name)}</div>
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div class="prog-name">${escHtml(item.name)}</div>
+          <div class="prog-time" style="font-size:0.75rem; color:var(--tx3);">0.0s</div>
+        </div>
         <div class="prog-msg">Queued…</div>
+        <div class="prog-bar-container" style="display:none; height:4px; background:rgba(255,255,255,0.05); border-radius:2px; margin-top:8px; overflow:hidden;">
+          <div class="prog-bar" style="height:100%; width:0%; background:linear-gradient(90deg, var(--a1), var(--a2)); transition:width 0.3s;"></div>
+        </div>
+        <div class="prog-logs" style="display:none; font-family: monospace; font-size:0.7rem; color:var(--tx3); margin-top:6px; max-height:80px; overflow-y:auto; background:rgba(0,0,0,0.2); padding:6px; border-radius:4px; line-height:1.2; white-space: pre-wrap; word-break: break-all;"></div>
       </div>
     `;
     progList.appendChild(el);
@@ -807,50 +814,119 @@ async function convertAll() {
     const el = progEls[item.id];
     const msgEl = el.querySelector('.prog-msg');
     const statusEl = el.querySelector('.prog-status');
-    msgEl.textContent = 'Converting…';
+    const timeEl = el.querySelector('.prog-time');
+    const barContainer = el.querySelector('.prog-bar-container');
+    const bar = el.querySelector('.prog-bar');
+    const logsEl = el.querySelector('.prog-logs');
+
+    msgEl.textContent = 'Preparing…';
+    barContainer.style.display = 'block';
+    logsEl.style.display = 'block';
+
+    const startTime = Date.now();
+    const timerInterval = setInterval(() => {
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+      timeEl.textContent = `${elapsed}s`;
+    }, 100);
 
     try {
-      let data;
+      const fd = new FormData();
       if (item.type === 'url') {
-        msgEl.textContent = 'Fetching URL…';
-        const resp = await fetch('/api/convert-url', {
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({
-            url: item.url,
-            provider: providerSelect.value,
-            key: apiKeyInput.value.trim(),
-            model: document.getElementById('llm-model').value,
-            base_url: baseUrlInput.value.trim(),
-            img_desc_lang: imgDescLangSelect.value
-          }),
-        });
-        data = await resp.json();
-        if (!resp.ok || data.error) throw new Error(data.error || 'URL conversion failed');
+        fd.append('url', item.url);
       } else {
-        msgEl.textContent = 'Uploading & converting…';
-        const fd = new FormData();
         fd.append('file', item.file);
-        fd.append('provider', providerSelect.value);
-        fd.append('key', apiKeyInput.value.trim());
-        fd.append('model', document.getElementById('llm-model').value);
-        fd.append('base_url', baseUrlInput.value.trim());
-        fd.append('img_desc_lang', imgDescLangSelect.value);
-        const resp = await fetch('/api/convert', { method:'POST', body:fd });
-        data = await resp.json();
-        if (!resp.ok || data.error) throw new Error(data.error || 'Conversion failed');
+      }
+      fd.append('provider', providerSelect.value);
+      fd.append('key', apiKeyInput.value.trim());
+      fd.append('model', document.getElementById('llm-model').value);
+      fd.append('base_url', baseUrlInput.value.trim());
+      fd.append('img_desc_lang', imgDescLangSelect.value);
+
+      const response = await fetch('/api/convert-stream', { method: 'POST', body: fd });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
       }
 
-      results.push({ id: item.id, name: item.name, markdown: data.markdown, chars: data.chars ?? data.markdown.length });
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let markdownText = '';
+      let filename = item.name;
+      let charCount = 0;
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop(); // Keep remaining incomplete chunk
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || !trimmed.startsWith('data: ')) continue;
+          
+          try {
+            const data = JSON.parse(trimmed.substring(6));
+            
+            if (data.message) {
+              const logLine = document.createElement('div');
+              logLine.textContent = `[${((Date.now() - startTime)/1000).toFixed(1)}s] ${data.message}`;
+              logsEl.appendChild(logLine);
+              logsEl.scrollTop = logsEl.scrollHeight;
+              msgEl.textContent = data.message;
+            }
+
+            let progressPercent = 10;
+            const msg = (data.message || '').toLowerCase();
+            if (msg.includes('download')) progressPercent = 20;
+            else if (msg.includes('saving')) progressPercent = 30;
+            else if (msg.includes('ocr') || msg.includes('ai client')) progressPercent = 40;
+            else if (msg.includes('document extraction') || msg.includes('markitdown')) progressPercent = 50;
+            else if (msg.includes('text extraction complete')) progressPercent = 70;
+            else if (msg.includes('scanning')) progressPercent = 75;
+            else if (msg.includes('described image')) {
+              const match = msg.match(/described image (\d+)\/(\d+)/);
+              if (match) {
+                const current = parseInt(match[1]);
+                const total = parseInt(match[2]);
+                progressPercent = 75 + Math.round((current / total) * 20);
+              } else {
+                progressPercent = 85;
+              }
+            } else if (msg.includes('injected')) progressPercent = 95;
+
+            if (data.status === 'done') {
+              progressPercent = 100;
+              markdownText = data.markdown;
+              if (data.filename) filename = data.filename;
+              charCount = data.chars ?? data.markdown.length;
+            } else if (data.status === 'error') {
+              throw new Error(data.message || 'Stream processing error');
+            }
+
+            bar.style.width = `${progressPercent}%`;
+          } catch (e) {
+            console.error("Error parsing stream event:", e, trimmed);
+          }
+        }
+      }
+
+      clearInterval(timerInterval);
+
+      results.push({ id: item.id, name: filename, markdown: markdownText, chars: charCount });
       el.classList.add('done');
       statusEl.innerHTML = '<span style="font-size:1.1rem">✅</span>';
-      msgEl.textContent = `Done — ${(data.chars??data.markdown.length).toLocaleString()} chars`;
+      msgEl.textContent = `Done — ${charCount.toLocaleString()} chars`;
+      bar.style.width = '100%';
 
     } catch (err) {
+      clearInterval(timerInterval);
       results.push({ id: item.id, name: item.name, markdown: '', chars: 0, error: err.message });
       el.classList.add('error');
       statusEl.innerHTML = '<span style="font-size:1.1rem">❌</span>';
       msgEl.textContent = err.message;
+      bar.style.backgroundColor = '#ef4444';
     }
   }
 
