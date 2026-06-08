@@ -100,7 +100,7 @@ chmod +x build.sh
 ```bash
 chmod +x create_dmg.sh
 ./create_dmg.sh
-# → dist/mdConvertor-1.4.1-macOS.dmg
+# → dist/mdConvertor-1.4.2-macOS.dmg
 ```
 
 ---

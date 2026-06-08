@@ -1,3 +1,13 @@
+## What's New in v1.4.2
+
+This release fixes the Flask request context unbound error during real-time streaming conversion, ensuring a seamless and error-free execution flow.
+
+### 🐛 Bug Fixes
+- **Request Context Bug Fix:** Fixed a critical issue where conversion would fail (yielding 0 characters) due to a Flask request context unbound error by pre-saving uploaded files outside the generator.
+- **Workflow Version Upgrade:** Upgraded GitHub Action steps in `.github/workflows/build.yml` to the latest versions to resolve runner deprecation blocks.
+
+---
+
 ## What's New in v1.4.1
 
 This release adds real-time conversion progress logs, a visual progress bar, and significant reliability and performance improvements.
