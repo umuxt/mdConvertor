@@ -16,6 +16,23 @@ Built with [MarkItDown](https://github.com/microsoft/markitdown) (Microsoft) · 
    - **Option B (Terminal):** Run `xattr -cr /Applications/mdConvertor.app`.
    - *Requires macOS 11 Big Sur or later.*
 
+#### 💻 Alternatif: Terminal ile Hızlı Kurulum (Güvenlik Engelini Otomatik Aşar)
+Eğer sürükle-bırak yapmak yerine terminal kullanmak isterseniz, aşağıdaki komutları sırayla çalıştırarak uygulamayı doğrudan kurabilir ve güvenlik engelini otomatik olarak kaldırabilirsiniz:
+
+```bash
+# 1. Uygulamayı indirip sisteme bağlayın
+curl -L -o ~/Downloads/mdConvertor.dmg https://github.com/umuxt/mdConvertor/releases/download/v1.4.4/mdConvertor-1.4.4-macOS.dmg
+hdiutil attach ~/Downloads/mdConvertor.dmg
+
+# 2. Uygulamalar klasörüne kopyalayıp disk imajını çıkarın
+cp -R "/Volumes/mdConvertor 1.4.4/mdConvertor.app" /Applications/
+hdiutil detach "/Volumes/mdConvertor 1.4.4"
+
+# 3. macOS güvenlik engelini kaldırın
+xattr -cr /Applications/mdConvertor.app
+```
+
+
 ### Windows
 1. **Download:** 👉 **[Download the latest Windows ZIP](https://github.com/umuxt/mdConvertor/releases/latest)** from GitHub Releases.
 2. **Install:** Extract the downloaded `mdConvertor-windows.zip` file to any directory on your computer (e.g. `C:\Program Files` or a custom directory).
