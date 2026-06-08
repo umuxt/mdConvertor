@@ -6,33 +6,20 @@ Built with [MarkItDown](https://github.com/microsoft/markitdown) (Microsoft) · 
 
 ---
 
-## ⬇️ Download & Install (macOS)
+## ⬇️ Download & Install
 
-### 1. Download the latest release
+### macOS
+1. **Download:** 👉 **[Download the latest macOS DMG](https://github.com/umuxt/mdConvertor/releases/latest)** from GitHub Releases.
+2. **Install:** Open the downloaded `.dmg` file and drag **mdConvertor** into your **Applications** folder.
+3. **First launch (Gatekeeper bypass):**
+   - **Option A (Right-click):** Right-click `mdConvertor.app` in Applications → click **Open** → Click **Open** again in the dialog.
+   - **Option B (Terminal):** Run `xattr -cr /Applications/mdConvertor.app`.
+   - *Requires macOS 11 Big Sur or later.*
 
-👉 **[Download the latest macOS DMG](https://github.com/umuxt/mdConvertor/releases/latest)** — GitHub Releases
-
-### 2. Install
-
-1. Open the downloaded `.dmg` file
-2. Drag **mdConvertor** → **Applications**
-3. Eject the disk image
-
-### 3. First launch (Gatekeeper bypass)
-
-Because the app is not from the App Store, macOS will warn you on first launch:
-
-**Option A — Right-click method (easiest):**
-> Right-click `mdConvertor.app` in Applications → **Open** → Click **Open** in the dialog
-
-**Option B — Terminal:**
-```bash
-xattr -cr /Applications/mdConvertor.app
-```
-
-After this, the app opens normally every time with a double-click.
-
-> **macOS version:** Requires macOS 11 Big Sur or later (Apple Silicon & Intel supported)
+### Windows
+1. **Download:** 👉 **[Download the latest Windows ZIP](https://github.com/umuxt/mdConvertor/releases/latest)** from GitHub Releases.
+2. **Install:** Extract the downloaded `mdConvertor-windows.zip` file to any directory on your computer (e.g. `C:\Program Files` or a custom directory).
+3. **Launch:** Open the extracted folder and double-click `mdConvertor.exe` to run the application.
 
 ---
 
