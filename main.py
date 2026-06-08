@@ -63,7 +63,13 @@ def main() -> None:
         background_color="#0a0a0f",
     )
 
-    storage_dir = os.path.expanduser("~/Library/Application Support/mdConvertor")
+    if sys.platform == "darwin":
+        storage_dir = os.path.expanduser("~/Library/Application Support/mdConvertor")
+    elif sys.platform == "win32":
+        storage_dir = os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")), "mdConvertor")
+    else:
+        storage_dir = os.path.expanduser("~/.config/mdConvertor")
+
     os.makedirs(storage_dir, exist_ok=True)
     webview.start(debug=False, private_mode=False, storage_path=storage_dir)
 

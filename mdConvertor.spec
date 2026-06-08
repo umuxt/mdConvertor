@@ -2,9 +2,16 @@
 # Use --onedir (not --onefile) for better macOS stability.
 
 import os
+import sys
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules, copy_metadata
 
 block_cipher = None
+
+platform_hidden_imports = []
+if sys.platform == 'darwin':
+    platform_hidden_imports.append('webview.platforms.cocoa')
+elif sys.platform == 'win32':
+    platform_hidden_imports.extend(['webview.platforms.winforms', 'webview.platforms.edgehtml'])
 
 # Collect all markitdown data/submodule files
 markitdown_datas = collect_data_files('markitdown')
@@ -69,7 +76,7 @@ a = Analysis(
         'markitdown._markitdown',
         'flask',
         'webview',
-        'webview.platforms.cocoa',
+        *platform_hidden_imports,
         'jinja2',
         'werkzeug',
         'magika',
@@ -138,16 +145,17 @@ coll = COLLECT(
     name='mdConvertor',
 )
 
-app = BUNDLE(
-    coll,
-    name='mdConvertor.app',
-    icon=None,
-    bundle_identifier='com.mdconvertor.app',
-    info_plist={
-        'CFBundleDisplayName': 'mdConvertor',
-        'CFBundleShortVersionString': '1.4.0',
-        'CFBundleVersion': '1.4.0',
-        'NSHighResolutionCapable': True,
-        'NSRequiresAquaSystemAppearance': False,
-    },
-)
+if sys.platform == 'darwin':
+    app = BUNDLE(
+        coll,
+        name='mdConvertor.app',
+        icon=None,
+        bundle_identifier='com.mdconvertor.app',
+        info_plist={
+            'CFBundleDisplayName': 'mdConvertor',
+            'CFBundleShortVersionString': '1.4.0',
+            'CFBundleVersion': '1.4.0',
+            'NSHighResolutionCapable': True,
+            'NSRequiresAquaSystemAppearance': False,
+        },
+    )
