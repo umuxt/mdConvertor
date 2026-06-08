@@ -43,6 +43,7 @@ After this, the app opens normally every time with a double-click.
 | 📂 Multi-file Drop | Drop multiple files at once, then convert all |
 | 🔗 YouTube & URLs | Extracts title, channel, views, description + transcript |
 | ✂️ Split View | Raw Markdown + live rendered preview side by side |
+| 🖼️ AI Image Descriptions | Extract images from PDFs and generate descriptions with custom language choice (English/Turkish/Auto) |
 | ⬇️ Save to Downloads | Files saved as `originalname-converted.md` to `~/Downloads` |
 | 🌑 Dark Mode | Premium glassmorphism UI |
 | 📦 Native Window | WKWebView — no Electron, fast & lightweight |
@@ -99,7 +100,7 @@ chmod +x build.sh
 ```bash
 chmod +x create_dmg.sh
 ./create_dmg.sh
-# → dist/mdConvertor-1.3.0-macOS.dmg
+# → dist/mdConvertor-1.4.0-macOS.dmg
 ```
 
 ---
