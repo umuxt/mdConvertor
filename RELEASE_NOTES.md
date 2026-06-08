@@ -1,3 +1,16 @@
+## What's New in v1.4.1
+
+This release adds real-time conversion progress logs, a visual progress bar, and significant reliability and performance improvements.
+
+### ✨ Features & Bug Fixes
+- **Real-Time Progress & Logs:** Users can now view step-by-step progress logs and a progress bar directly in the UI during conversion, indicating the current status (e.g. text extraction, image scanning, AI description progress).
+- **Parallel AI Descriptions:** Spearheaded parallel execution of LLM image description requests, vastly reducing wait times on PDFs with multiple images.
+- **Request Context Bug Fix:** Fixed a critical issue where conversion would fail (yielding 0 characters) due to a Flask request context unbound error.
+- **Cross-Platform Compatibility:** Adjusted local storage paths to dynamically adapt to Windows (`%APPDATA%`), macOS (`~/Library/Application Support`), and Linux, and prepared the PyInstaller spec file for Windows builds.
+- **Automated CI/CD Workflows:** Added a GitHub Actions workflow to build and package both macOS `.dmg` and Windows `.zip` binaries automatically on release tags.
+
+---
+
 ## What's New in v1.4.0
 
 This release introduces native PDF image extraction and AI-powered image descriptions with language support.

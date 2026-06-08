@@ -153,8 +153,8 @@ if sys.platform == 'darwin':
         bundle_identifier='com.mdconvertor.app',
         info_plist={
             'CFBundleDisplayName': 'mdConvertor',
-            'CFBundleShortVersionString': '1.4.0',
-            'CFBundleVersion': '1.4.0',
+            'CFBundleShortVersionString': '1.4.1',
+            'CFBundleVersion': '1.4.1',
             'NSHighResolutionCapable': True,
             'NSRequiresAquaSystemAppearance': False,
         },
