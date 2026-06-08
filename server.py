@@ -160,6 +160,130 @@ def allowed_file(filename: str) -> bool:
     return ext in ALLOWED_EXTENSIONS
 
 
+# ── PDF Image Extraction + LLM Description ───────────────────────────────────
+MIN_IMAGE_DIM = 50   # Skip images smaller than 50x50 (icons, separators)
+MAX_IMAGES = 20      # Limit to prevent token budget overflow
+# Prompts per language
+_IMG_PROMPTS = {
+    "en": "Write a detailed description of this image. If it contains a diagram, chart, or table, describe its structure and data. If it contains text, transcribe it.",
+    "tr": "Bu görselin detaylı bir açıklamasını yaz. Eğer diyagram, grafik veya tablo içeriyorsa yapısını ve verilerini açıkla. Metin içeriyorsa metnin transkripsiyonunu yap.",
+    "auto": "Write a detailed description of this image in the same language as any surrounding text. If it contains a diagram, chart, or table, describe its structure and data. If it contains text, transcribe it.",
+}
+
+def _call_llm_for_image(llm_client, llm_model, img_b64: str, mime_type: str, lang: str = "en") -> str:
+    """Send a single image to the LLM and return a text description."""
+    prompt = _IMG_PROMPTS.get(lang, _IMG_PROMPTS["en"])
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": prompt},
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:{mime_type};base64,{img_b64}",
+                    },
+                },
+            ],
+        }
+    ]
+    try:
+        response = llm_client.chat.completions.create(model=llm_model, messages=messages)
+        return response.choices[0].message.content
+    except Exception as e:
+        return f"[Image description failed: {e}]"
+
+
+def extract_pdf_images_with_descriptions(pdf_path: str, llm_client, llm_model: str, lang: str = "en") -> dict:
+    """
+    Extract images from a PDF using PyMuPDF, send each to the LLM for
+    description, and return a dict mapping page numbers to descriptions.
+    Returns: {page_number: ["description1", "description2", ...]}
+    """
+    import fitz  # PyMuPDF
+    import base64
+
+    descriptions = {}  # {page_num (1-indexed): [desc, ...]}
+    image_count = 0
+
+    try:
+        doc = fitz.open(pdf_path)
+        for page_num in range(len(doc)):
+            if image_count >= MAX_IMAGES:
+                break
+            page = doc[page_num]
+            images = page.get_images(full=True)
+            for img_info in images:
+                if image_count >= MAX_IMAGES:
+                    break
+                xref = img_info[0]
+                try:
+                    base_img = doc.extract_image(xref)
+                except Exception:
+                    continue
+                # Skip tiny images (icons, bullets, separators)
+                if base_img["width"] < MIN_IMAGE_DIM or base_img["height"] < MIN_IMAGE_DIM:
+                    continue
+                img_b64 = base64.b64encode(base_img["image"]).decode("utf-8")
+                ext = base_img["ext"]
+                mime_type = f"image/{'jpeg' if ext in ('jpg', 'jpeg') else ext}"
+                desc = _call_llm_for_image(llm_client, llm_model, img_b64, mime_type, lang)
+                descriptions.setdefault(page_num + 1, []).append(desc)
+                image_count += 1
+        doc.close()
+    except Exception as e:
+        print(f"[PDF image extraction error]: {e}", flush=True)
+
+    return descriptions
+
+
+def _merge_image_descriptions(markdown_text: str, descriptions: dict, lang: str = "en") -> str:
+    """
+    Insert image descriptions into the markdown at the correct page positions.
+    Looks for '## Page N' headings and appends descriptions after each page's content.
+    """
+    if not descriptions:
+        return markdown_text
+
+    # Labels per language
+    lbl_img = "Image" if lang != "tr" else "Görsel"
+    lbl_page = "Page" if lang != "tr" else "Sayfa"
+
+    import re as _re
+    # Split markdown by page headings
+    page_pattern = _re.compile(r"(## Page (\d+))")
+    parts = page_pattern.split(markdown_text)
+
+    # parts structure: [before, heading, num, content, heading, num, content, ...]
+    if len(parts) < 4:
+        # No page headings found — append all descriptions at the end
+        extras = []
+        for pg, descs in sorted(descriptions.items()):
+            for i, desc in enumerate(descs, 1):
+                extras.append(f"\n\n> 📷 **{lbl_img} {i} ({lbl_page} {pg}):** {desc}")
+        return markdown_text + "\n".join(extras)
+
+    # Rebuild markdown with descriptions injected
+    result = parts[0]  # Content before first page heading
+    i = 1
+    while i < len(parts):
+        heading = parts[i]       # "## Page N"
+        page_num = int(parts[i + 1])  # N
+        content = parts[i + 2] if i + 2 < len(parts) else ""
+
+        result += heading + content
+
+        # Append image descriptions for this page
+        if page_num in descriptions:
+            for j, desc in enumerate(descriptions[page_num], 1):
+                result += f"\n\n> 📷 **{lbl_img} {j} ({lbl_page} {page_num}):** {desc}"
+            result += "\n"
+
+        i += 3
+
+    return result
+
+
 def convert_youtube(url: str) -> str:
     """Extract YouTube video info + transcript via yt-dlp."""
     try:
@@ -352,6 +476,18 @@ def convert_file():
 
         result = md.convert(tmp_path, **conv_kwargs)
         markdown_text = result.text_content
+
+        # PDF image extraction + LLM description (only when API key is set)
+        img_desc_lang = request.form.get("img_desc_lang", "en").strip() or "en"
+        if ext == "pdf" and conv_kwargs.get("llm_client") and conv_kwargs.get("llm_model"):
+            try:
+                img_descs = extract_pdf_images_with_descriptions(
+                    tmp_path, conv_kwargs["llm_client"], conv_kwargs["llm_model"], img_desc_lang
+                )
+                if img_descs:
+                    markdown_text = _merge_image_descriptions(markdown_text, img_descs, img_desc_lang)
+            except Exception as img_exc:
+                print(f"[PDF image description error]: {img_exc}", flush=True)
 
         return jsonify({
             "markdown": markdown_text,

@@ -1,3 +1,14 @@
+## What's New in v1.4.0
+
+This release introduces native PDF image extraction and AI-powered image descriptions with language support.
+
+### ✨ Features & Upgrades
+- **PDF Image Extraction & Descriptions:** Native extraction of images from PDF pages using PyMuPDF and automatically generating descriptions/captions using LLMs (Claude, GPT-4o, etc.) when an API key is provided.
+- **Image Description Language Selector:** Added a dropdown selector in the Settings panel. Users can choose English, Turkish, or "Auto" (matches the primary document language) for AI-generated image descriptions.
+- **Seamless Inline Markdown Insertion:** Injects generated image descriptions right below the text of the page where the image was extracted.
+
+---
+
 ## What's New in v1.3.0
 
 This release fixes external web services integration, resolves bot-detection blocks, robustifies YouTube transcription, and enables persistent local storage for API settings.

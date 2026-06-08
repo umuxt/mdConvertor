@@ -431,8 +431,16 @@
             </select>
           </div>
         </div>
+        <div class="settings-field">
+          <label for="img-desc-lang">🖼️ Image Description Language</label>
+          <select id="img-desc-lang">
+            <option value="en">English</option>
+            <option value="tr">Türkçe</option>
+            <option value="auto">Auto (Match Document)</option>
+          </select>
+        </div>
       </div>
-      <p class="settings-note">Providing an API Key enables AI-powered OCR for scanned PDFs, Word/PPTX images, and detailed captions for image files. If left blank, standard offline conversion is used.</p>
+      <p class="settings-note">Providing an API Key enables AI-powered OCR for scanned PDFs, Word/PPTX images, and detailed captions for image files. The language setting controls the language of AI-generated image descriptions. If no key is set, standard offline conversion is used.</p>
     </div>
   </div>
 
@@ -534,8 +542,10 @@ let savedSettings = {
   provider: 'openai',
   key: '',
   base_url: '',
-  model: 'gpt-4o-mini'
+  model: 'gpt-4o-mini',
+  img_desc_lang: 'en'
 };
+const imgDescLangSelect = document.getElementById('img-desc-lang');
 
 // Update fields based on provider selection
 function updateFields() {
@@ -610,7 +620,8 @@ async function saveSettingsToServer() {
     provider: providerSelect.value,
     key: apiKeyInput.value.trim(),
     base_url: baseUrlInput.value.trim(),
-    model: modelEl ? modelEl.value : savedSettings.model
+    model: modelEl ? modelEl.value : savedSettings.model,
+    img_desc_lang: imgDescLangSelect.value
   };
   
   // Also update global state
@@ -637,12 +648,14 @@ async function loadSettingsFromServer() {
         provider: data.provider || 'openai',
         key: data.key || '',
         base_url: data.base_url || '',
-        model: data.model || 'gpt-4o-mini'
+        model: data.model || 'gpt-4o-mini',
+        img_desc_lang: data.img_desc_lang || 'en'
       };
       
       providerSelect.value = savedSettings.provider;
       apiKeyInput.value = savedSettings.key;
       baseUrlInput.value = savedSettings.base_url;
+      imgDescLangSelect.value = savedSettings.img_desc_lang;
     }
   } catch (err) {
     console.error("Failed to load settings:", err);
@@ -653,6 +666,7 @@ async function loadSettingsFromServer() {
 
 // Bind event listeners
 providerSelect.addEventListener('change', updateFields);
+imgDescLangSelect.addEventListener('change', saveSettingsToServer);
 
 apiKeyInput.addEventListener('input', saveSettingsToServer);
 apiKeyInput.addEventListener('change', saveSettingsToServer);
@@ -807,7 +821,8 @@ async function convertAll() {
             provider: providerSelect.value,
             key: apiKeyInput.value.trim(),
             model: document.getElementById('llm-model').value,
-            base_url: baseUrlInput.value.trim()
+            base_url: baseUrlInput.value.trim(),
+            img_desc_lang: imgDescLangSelect.value
           }),
         });
         data = await resp.json();
@@ -820,6 +835,7 @@ async function convertAll() {
         fd.append('key', apiKeyInput.value.trim());
         fd.append('model', document.getElementById('llm-model').value);
         fd.append('base_url', baseUrlInput.value.trim());
+        fd.append('img_desc_lang', imgDescLangSelect.value);
         const resp = await fetch('/api/convert', { method:'POST', body:fd });
         data = await resp.json();
         if (!resp.ok || data.error) throw new Error(data.error || 'Conversion failed');

@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
 APP_NAME="mdConvertor"
-VERSION="1.3.0"
+VERSION="1.4.0"
 APP_BUNDLE="dist/${APP_NAME}.app"
 DMG_NAME="${APP_NAME}-${VERSION}-macOS.dmg"
 DMG_PATH="dist/${DMG_NAME}"
