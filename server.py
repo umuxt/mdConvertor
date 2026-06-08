@@ -477,8 +477,9 @@ def index():
 
 @app.route("/api/convert-stream", methods=["POST"])
 def convert_stream():
-    from flask import Response
+    from flask import Response, request
     import json
+    import tempfile
 
     url = request.form.get("url", "").strip()
     provider = request.form.get("provider", "openai").strip()
@@ -486,6 +487,31 @@ def convert_stream():
     model = request.form.get("model", "").strip()
     base_url = request.form.get("base_url", "").strip()
     img_desc_lang = request.form.get("img_desc_lang", "en").strip() or "en"
+
+    # Pre-read file if not URL
+    pre_saved_tmp_path = None
+    orig_filename = None
+    ext = None
+    error_msg = None
+
+    if not url:
+        if "file" not in request.files:
+            error_msg = "No file part in request"
+        else:
+            file = request.files["file"]
+            if file.filename == "":
+                error_msg = "No file selected"
+            elif not allowed_file(file.filename):
+                error_msg = f"File type not supported: {file.filename}"
+            else:
+                orig_filename = file.filename
+                ext = orig_filename.rsplit(".", 1)[-1].lower() if "." in orig_filename else "bin"
+                try:
+                    with tempfile.NamedTemporaryFile(suffix=f".{ext}", delete=False) as tmp:
+                        pre_saved_tmp_path = tmp.name
+                        file.save(pre_saved_tmp_path)
+                except Exception as e:
+                    error_msg = f"Failed to save uploaded file: {e}"
 
     def generator():
         def emit(status, message="", data=None):
@@ -496,9 +522,12 @@ def convert_stream():
 
         yield emit("info", "Starting conversion...")
 
-        tmp_path = None
-        ext = None
-        orig_filename = None
+        if error_msg:
+            yield emit("error", error_msg)
+            return
+
+        tmp_path = pre_saved_tmp_path
+        nonlocal orig_filename, ext
 
         try:
             if url:
@@ -578,24 +607,7 @@ def convert_stream():
                     tmp_path = tmp.name
                     tmp.write(resp.content)
             else:
-                if "file" not in request.files:
-                    yield emit("error", "No file part in request")
-                    return
-                file = request.files["file"]
-                if file.filename == "":
-                    yield emit("error", "No file selected")
-                    return
-                if not allowed_file(file.filename):
-                    yield emit("error", f"File type not supported: {file.filename}")
-                    return
-
-                orig_filename = file.filename
-                ext = orig_filename.rsplit(".", 1)[-1].lower() if "." in orig_filename else "bin"
-                
-                yield emit("info", "Saving uploaded file to local temp space...")
-                with tempfile.NamedTemporaryFile(suffix=f".{ext}", delete=False) as tmp:
-                    tmp_path = tmp.name
-                    file.save(tmp_path)
+                yield emit("info", f"Reading uploaded file: {orig_filename}...")
 
             conv_kwargs = {}
             if key:
